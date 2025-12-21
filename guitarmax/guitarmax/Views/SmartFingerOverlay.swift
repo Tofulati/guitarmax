@@ -1,5 +1,5 @@
 //
-//  FingerStatusOverlay.swift
+//  SmartFingerOverlay.swift
 //  guitarmax
 //
 //  Created by albert ho on 12/19/25.
@@ -7,47 +7,72 @@
 
 import SwiftUI
 import Vision
+import AVFoundation
 
-struct FingerStatusOverlay: View {
+struct SmartFingerOverlay: View {
     let chord: GuitarChord
     let handPoints: [VNHumanHandPoseObservation.JointName: CGPoint]
     let fingerStatus: [Int: FingerStatus]
+    let guitarZone: GuitarZone
     
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Draw circles at detected fingertip positions with status colors
-                ForEach(getFingertipsToTrack(), id: \.finger) { item in
-                    if let tipPosition = handPoints[item.joint] {
-                        let status = fingerStatus[item.finger] ?? .missing
+                // Draw target positions (yellow circles) on guitar
+                ForEach(Array(chord.fingerPositions.enumerated()), id: \.offset) { index, position in
+                    if position.fret > 0 {
+                        let targetPos = guitarZone.getFingerPosition(fret: position.fret, string: position.string)
+                        let x = targetPos.x * geometry.size.width
+                        let y = targetPos.y * geometry.size.height
                         
                         Circle()
-                            .stroke(getStatusColor(status), lineWidth: 4)
-                            .fill(getStatusColor(status).opacity(0.3))
-                            .frame(width: 50, height: 50)
-                            .position(
-                                x: tipPosition.x * geometry.size.width,
-                                y: tipPosition.y * geometry.size.height
-                            )
+                            .stroke(Color.yellow, lineWidth: 4)
+                            .fill(Color.yellow.opacity(0.3))
+                            .frame(width: 55, height: 55)
+                            .position(x: x, y: y)
                             .overlay(
                                 VStack(spacing: 2) {
-                                    Text("\(item.finger)")
-                                        .font(.system(size: 20, weight: .bold))
+                                    Text("\(position.finger)")
+                                        .font(.system(size: 22, weight: .bold))
                                         .foregroundColor(.white)
-                                    Image(systemName: getStatusIcon(status))
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.white)
+                                    Text("F\(position.fret)")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundColor(.white.opacity(0.8))
                                 }
                                 .shadow(color: .black, radius: 2)
-                                .position(
-                                    x: tipPosition.x * geometry.size.width,
-                                    y: tipPosition.y * geometry.size.height
-                                )
+                                .position(x: x, y: y)
                             )
                     }
                 }
                 
-                // Overall status message at top
+                // Draw detected fingertips with status
+                ForEach(getFingertipsToTrack(), id: \.finger) { item in
+                    if let tipPosition = handPoints[item.joint] {
+                        let status = fingerStatus[item.finger] ?? .missing
+                        let x = tipPosition.x * geometry.size.width
+                        let y = tipPosition.y * geometry.size.height
+                        
+                        Circle()
+                            .stroke(getStatusColor(status), lineWidth: 4)
+                            .fill(getStatusColor(status).opacity(0.3))
+                            .frame(width: 42, height: 42)
+                            .position(x: x, y: y)
+                            .overlay(
+                                VStack(spacing: 0) {
+                                    Text("\(item.finger)")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(.white)
+                                    Image(systemName: getStatusIcon(status))
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.white)
+                                }
+                                .shadow(color: .black, radius: 2)
+                                .position(x: x, y: y)
+                            )
+                    }
+                }
+                
+                // Status message at top
                 VStack {
                     HStack(spacing: 12) {
                         let correctCount = fingerStatus.values.filter { $0 == .correct }.count
@@ -86,9 +111,7 @@ struct FingerStatusOverlay: View {
             (4, .littleTip)
         ]
         
-        // Only track fingers that are required for this chord
         let requiredFingers = Set(chord.fingerPositions.filter { $0.finger > 0 }.map { $0.finger })
-        
         return allFingers.filter { requiredFingers.contains($0.0) }
     }
     

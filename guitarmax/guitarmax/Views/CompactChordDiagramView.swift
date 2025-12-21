@@ -9,75 +9,83 @@ import SwiftUI
 
 struct CompactChordDiagramView: View {
     let chord: GuitarChord
-    
+
     var body: some View {
         GeometryReader { geometry in
             let stringSpacing = geometry.size.width / 6
             let fretHeight = geometry.size.height / 5
-            
+
             ZStack {
-                // Draw strings (vertical lines)
-                ForEach(0..<6) { string in
+
+                // Strings (low E → high e)
+                ForEach(0..<6) { i in
+                    let x = stringSpacing * CGFloat(i) + stringSpacing / 2
                     Path { path in
-                        let x = stringSpacing * CGFloat(string) + stringSpacing / 2
                         path.move(to: CGPoint(x: x, y: 0))
                         path.addLine(to: CGPoint(x: x, y: geometry.size.height))
                     }
                     .stroke(Color.white, lineWidth: 2)
                 }
-                
-                // Draw frets (horizontal lines)
+
+                // Frets
                 ForEach(0..<5) { fret in
+                    let y = fretHeight * CGFloat(fret)
                     Path { path in
-                        let y = fretHeight * CGFloat(fret)
                         path.move(to: CGPoint(x: 0, y: y))
                         path.addLine(to: CGPoint(x: geometry.size.width, y: y))
                     }
                     .stroke(Color.white, lineWidth: fret == 0 ? 4 : 1.5)
                 }
-                
-                // Draw string labels at bottom
-                ForEach(0..<6) { string in
-                    let stringNames = ["E", "A", "D", "G", "B", "e"]
-                    Text(stringNames[string])
+
+                // String labels
+                let stringNames = ["E", "A", "D", "G", "B", "e"]
+                ForEach(0..<6) { i in
+                    Text(stringNames[i])
                         .font(.caption2)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                         .position(
-                            x: stringSpacing * CGFloat(string) + stringSpacing / 2,
-                            y: geometry.size.height + 15
+                            x: stringSpacing * CGFloat(i) + stringSpacing / 2,
+                            y: geometry.size.height + 14
                         )
                 }
-                
-                // Draw finger positions
-                ForEach(Array(chord.fingerPositions.enumerated()), id: \.offset) { index, position in
-                    let xPos = stringSpacing * CGFloat(index) + stringSpacing / 2
-                    let yPos = fretHeight * CGFloat(position.fret) - fretHeight / 2
-                    
+
+                // Finger positions
+                ForEach(chord.fingerPositions.indices, id: \.self) { i in
+                    let position = chord.fingerPositions[i]
+
+                    // Convert string number (1–6) → view index (0–5)
+                    let stringIndex = 6 - position.string
+                    let x = stringSpacing * CGFloat(stringIndex) + stringSpacing / 2
+
                     if position.fret > 0 {
+                        let y = fretHeight * (CGFloat(position.fret) - 0.5)
+
                         Circle()
                             .fill(Color.yellow)
-                            .frame(width: 24, height: 24)
-                            .position(x: xPos, y: yPos)
+                            .frame(width: 22, height: 22)
+                            .position(x: x, y: y)
                             .overlay(
                                 Text("\(position.finger)")
-                                    .font(.caption)
+                                    .font(.caption2)
                                     .fontWeight(.bold)
                                     .foregroundColor(.black)
-                                    .position(x: xPos, y: yPos)
+                                    .position(x: x, y: y)
                             )
+
                     } else if position.fret == 0 {
                         Text("O")
                             .font(.caption)
                             .fontWeight(.bold)
                             .foregroundColor(.green)
-                            .position(x: xPos, y: -10)
+                            .position(x: x, y: -10)
+
                     } else {
                         Text("X")
                             .font(.caption)
                             .fontWeight(.bold)
                             .foregroundColor(.red)
-                            .position(x: xPos, y: -10)
+                            .position(x: x, y: -10)
                     }
                 }
             }

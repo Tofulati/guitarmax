@@ -25,6 +25,9 @@ class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
 
     private var lastVisionTime: CFAbsoluteTime = 0
     private let visionFPS: Double = 15
+    
+    // Guitar tracking
+    var guitarTracker: GuitarNeckTracker?
 
     override init() {
         super.init()
@@ -77,7 +80,6 @@ class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
                 self.captureSession.addOutput(self.videoOutput)
                 self.videoOutput.setSampleBufferDelegate(self, queue: self.outputQueue)
                 
-                // Set video orientation to portrait
                 if let connection = self.videoOutput.connection(with: .video) {
                     connection.videoRotationAngle = 90
                 }
@@ -85,12 +87,10 @@ class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
 
             self.captureSession.commitConfiguration()
             
-            // Create preview layer before starting session
             DispatchQueue.main.async {
                 let layer = AVCaptureVideoPreviewLayer(session: self.captureSession)
                 layer.videoGravity = .resizeAspectFill
                 
-                // Set preview layer orientation
                 if let connection = layer.connection {
                     connection.videoRotationAngle = 90
                     connection.automaticallyAdjustsVideoMirroring = false
@@ -99,7 +99,6 @@ class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
                 
                 self.previewLayer = layer
                 
-                // Start session after preview layer is created
                 self.sessionQueue.async {
                     self.captureSession.startRunning()
                 }
@@ -127,6 +126,14 @@ class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            return
+        }
+        
+        // Process guitar tracking if tracker is active
+        guitarTracker?.processFrame(pixelBuffer)
+        
+        // Process hand detection if enabled
         let detecting = detectionQueue.sync { isDetecting }
         guard detecting else { return }
 
@@ -134,14 +141,9 @@ class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
         guard now - lastVisionTime > 1.0 / visionFPS else { return }
         lastVisionTime = now
 
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            return
-        }
-
         let request = VNDetectHumanHandPoseRequest()
         request.maximumHandCount = 1
         
-        // Create handler with proper orientation
         let handler = VNImageRequestHandler(
             cvPixelBuffer: pixelBuffer,
             orientation: .up,
@@ -162,9 +164,6 @@ class CameraManager: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleB
 
             var points: [VNHumanHandPoseObservation.JointName: CGPoint] = [:]
 
-            // Vision framework coordinates are normalized (0-1)
-            // Origin is bottom-left, we need to flip Y for screen coordinates
-            // Also flip X for mirrored front camera
             for (joint, point) in recognizedPoints where point.confidence > 0.3 {
                 points[joint] = CGPoint(
                     x: 1 - point.location.x,
